@@ -10,6 +10,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .topbar{background:#1e2235;color:#fff;padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
 .topbar h1{font-size:15px;font-weight:600;letter-spacing:.3px}
 .topbar .sub{font-size:11px;opacity:.45;margin-top:3px}
+.save-indicator{font-size:11px;color:rgba(255,255,255,.4);display:flex;align-items:center;gap:6px}
+.save-dot{width:7px;height:7px;border-radius:50%;background:#27ae60}
+.save-dot.saving{background:#f39c12;animation:pulse .6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 .toolbar{background:#fff;border-bottom:1px solid #e2e5ec;padding:10px 28px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tool-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#aaa;margin-right:2px}
@@ -17,9 +21,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .mode-btn:hover{opacity:.8}
 .mode-btn.active{filter:brightness(.92);outline:2px solid rgba(0,0,0,.25)}
 .sep{width:1px;height:24px;background:#eee;margin:0 8px}
-.edit-btn{padding:5px 12px;border-radius:5px;border:1.5px solid #c8d0de;font-size:11px;cursor:pointer;background:#f5f7fb;color:#555;font-weight:500;transition:all .15s}
-.edit-btn:hover{background:#e8ecf3}
-.edit-btn.active-edit{background:#1e2235;color:#fff;border-color:#1e2235}
 
 .legend{display:flex;gap:16px;align-items:center;margin-left:auto;flex-wrap:wrap}
 .leg{display:flex;align-items:center;gap:5px;font-size:11px;color:#666}
@@ -74,7 +75,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .stat-l.editable:hover{border-bottom-color:#bbb}
 .stat-input{font-size:10px;color:#555;border:1px solid #4ecdc4;border-radius:3px;padding:1px 4px;width:80px;text-align:center;outline:none;text-transform:uppercase;letter-spacing:.5px}
 
-/* Modal */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
 .modal-bg.open{display:flex}
 .modal{background:#fff;border-radius:10px;padding:24px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,.18)}
@@ -95,6 +95,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="font-size:15px;font-weight:600;color:#fff">🎯 GLORIA — Agent Engagement Tracker</div>
     <div class="sub">May 2026 &nbsp;·&nbsp; Select a mode then click cells &nbsp;·&nbsp; Click agent names or stat labels to rename</div>
   </div>
+  <div class="save-indicator">
+    <div class="save-dot" id="save-dot"></div>
+    <span id="save-label">All changes saved</span>
+  </div>
 </div>
 
 <div class="toolbar">
@@ -109,12 +113,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <span>●</span> <span id="lbl-dir">Direct</span>
   </button>
   <div class="sep"></div>
-  <button class="mode-btn" id="btn-mil" onclick="setMode('mil')" style="border-color:#111;color:#111">
-    ⬤ Milestone
-  </button>
-  <button class="mode-btn" id="btn-clr" onclick="setMode('clr')" style="border-color:#aaa;color:#aaa">
-    ✕ Clear
-  </button>
+  <button class="mode-btn" id="btn-mil" onclick="setMode('mil')" style="border-color:#111;color:#111">⬤ Milestone</button>
+  <button class="mode-btn" id="btn-clr" onclick="setMode('clr')" style="border-color:#aaa;color:#aaa">✕ Clear</button>
   <div class="sep"></div>
   <div class="legend">
     <div class="leg"><div class="leg-box" style="background:#27ae60"></div><span id="leg-sus">Sustenance</span></div>
@@ -133,7 +133,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
-<div class="statsbar" id="statsbar">
+<div class="statsbar">
   <div class="stat"><div class="stat-n" id="s-total">0</div><div class="stat-l">Total Active</div></div>
   <div class="stat"><div class="stat-n g" id="s-sus">0</div><div class="stat-l editable" id="sl-sus" onclick="editStatLabel('sus')" title="Click to rename">Sustenance</div></div>
   <div class="stat"><div class="stat-n o" id="s-tar">0</div><div class="stat-l editable" id="sl-tar" onclick="editStatLabel('tar')" title="Click to rename">Targeted</div></div>
@@ -142,7 +142,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="stat"><div class="stat-n" id="s-top" style="font-size:13px">—</div><div class="stat-l">Most Active</div></div>
 </div>
 
-<!-- Edit Name Modal -->
 <div class="modal-bg" id="modal">
   <div class="modal">
     <h2 id="modal-title">Rename Agent</h2>
@@ -158,14 +157,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 const DAYS=31,TODAY=13,START_DOW=4;
 const DAY_NAMES=['Su','Mo','Tu','We','Th','Fr','Sa'];
+const STORAGE_KEY='gloria_gantt_v1';
 
-let agentNames=["Isla","Jeff Besitos","Toronto Founder","Apolitical Man","Sports Channel","Investigative J.","Sports Fan","D2 Baller","Frat Bro","Grandmother","LVF Fan Account","Agent 12","Agent 13"];
-let modeLabels={sus:'Sustenance',tar:'Targeted',dir:'Direct'};
+// ── Load or init state ──
+function defaultState(){
+  const names=["Isla","Jeff Besitos","Toronto Founder","Apolitical Man","Sports Channel","Investigative J.","Sports Fan","D2 Baller","Frat Bro","Grandmother","LVF Fan Account","Agent 12","Agent 13"];
+  const cells={};
+  names.forEach((_,ai)=>{cells[ai]={};for(let d=1;d<=DAYS;d++)cells[ai][d]={color:0,mil:false};});
+  return{agentNames:names,modeLabels:{sus:'Sustenance',tar:'Targeted',dir:'Direct'},cells};
+}
+
+let APP;
+try{
+  const raw=localStorage.getItem(STORAGE_KEY);
+  APP=raw?JSON.parse(raw):defaultState();
+}catch(e){APP=defaultState();}
+
+let {agentNames,modeLabels}=APP;
+const S=APP.cells;
 let mode='sus';
+let saveTimer=null;
 
-// state: {color: 0=blank,1=sus,2=tar,3=dir, mil: bool}
-const S={};
-agentNames.forEach((_,ai)=>{S[ai]={};for(let d=1;d<=DAYS;d++)S[ai][d]={color:0,mil:false};});
+function persist(){
+  const dot=document.getElementById('save-dot');
+  const lbl=document.getElementById('save-label');
+  dot.classList.add('saving');
+  lbl.textContent='Saving…';
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    try{
+      APP.agentNames=agentNames;
+      APP.modeLabels=modeLabels;
+      APP.cells=S;
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(APP));
+      dot.classList.remove('saving');
+      lbl.textContent='All changes saved';
+    }catch(e){
+      lbl.textContent='Save failed';
+    }
+  },400);
+}
 
 function isWknd(d){const dw=(START_DOW+d-1)%7;return dw===0||dw===6;}
 function dayName(d){return DAY_NAMES[(START_DOW+d-1)%7];}
@@ -174,7 +205,7 @@ function setMode(m){
   mode=m;
   ['sus','tar','dir','mil','clr'].forEach(x=>{
     const b=document.getElementById('btn-'+x);
-    if(b) b.classList.toggle('active',mode===x);
+    if(b)b.classList.toggle('active',mode===x);
   });
 }
 
@@ -197,8 +228,7 @@ function buildBody(){
       <div class="agent-name">
         <div class="agent-num">${ai+1}</div>
         <span class="name-text" id="nt-${ai}" onclick="startRename(${ai})" title="Click to rename">${name}</span>
-      </div>
-      <div class="cells">`;
+      </div><div class="cells">`;
     for(let d=1;d<=DAYS;d++){
       const wk=isWknd(d),tod=d===TODAY;
       h+=`<div class="cell${wk?' wknd':' blank'}${tod?' tod-col':''}" id="c-${ai}-${d}" data-ai="${ai}" data-d="${d}"></div>`;
@@ -206,6 +236,8 @@ function buildBody(){
     h+=`</div></div>`;
   });
   b.innerHTML=h;
+  // restore saved state
+  agentNames.forEach((_,ai)=>{for(let d=1;d<=DAYS;d++)renderCell(ai,d);});
   b.querySelectorAll('.cell').forEach(c=>{
     c.addEventListener('click',()=>cellClick(+c.dataset.ai,+c.dataset.d));
   });
@@ -220,10 +252,12 @@ function cellClick(ai,d){
   else if(mode==='clr'){cell.color=0;cell.mil=false;}
   renderCell(ai,d);
   updateStats();
+  persist();
 }
 
 function renderCell(ai,d){
   const el=document.getElementById(`c-${ai}-${d}`);
+  if(!el) return;
   const {color,mil}=S[ai][d];
   const wk=isWknd(d),tod=d===TODAY;
   let cls='cell';
@@ -236,7 +270,7 @@ function renderCell(ai,d){
   el.innerHTML=mil?'<div class="mil-dot"></div>':'';
 }
 
-// RENAME AGENT
+// rename agent
 let renameIdx=-1;
 function startRename(ai){
   renameIdx=ai;
@@ -249,39 +283,36 @@ function closeModal(){document.getElementById('modal').classList.remove('open');
 function saveModal(){
   if(renameIdx>=0){
     const val=document.getElementById('modal-input').value.trim();
-    if(val){
-      agentNames[renameIdx]=val;
-      document.getElementById(`nt-${renameIdx}`).textContent=val;
-    }
+    if(val){agentNames[renameIdx]=val;document.getElementById(`nt-${renameIdx}`).textContent=val;}
   }
   closeModal();
   updateStats();
+  persist();
 }
 document.getElementById('modal-input').addEventListener('keydown',e=>{if(e.key==='Enter')saveModal();if(e.key==='Escape')closeModal();});
 
-// RENAME STAT LABELS
-let editStatKey=null;
+// rename stat labels
 function editStatLabel(key){
-  editStatKey=key;
   const el=document.getElementById('sl-'+key);
-  const cur=el.textContent;
+  const cur=modeLabels[key]||el.textContent;
   el.innerHTML=`<input class="stat-input" id="si-${key}" value="${cur}">`;
   const inp=document.getElementById('si-'+key);
   inp.focus();inp.select();
-  inp.addEventListener('blur',()=>saveStatLabel(key));
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')saveStatLabel(key);if(e.key==='Escape'){el.innerHTML=`<span class="stat-l editable" id="sl-${key}" onclick="editStatLabel('${key}')" title="Click to rename">${cur}</span>`;el.onclick=null;}});
+  const done=()=>saveStatLabel(key,cur);
+  inp.addEventListener('blur',done);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')done();if(e.key==='Escape'){el.innerHTML=`<div class="stat-l editable" id="sl-${key}" title="Click to rename">${cur}</div>`;document.getElementById('sl-'+key).onclick=()=>editStatLabel(key);}});
 }
-function saveStatLabel(key){
+function saveStatLabel(key,fallback){
   const inp=document.getElementById('si-'+key);
-  if(!inp) return;
-  const val=inp.value.trim()||modeLabels[key];
+  if(!inp)return;
+  const val=inp.value.trim()||fallback;
   modeLabels[key]=val;
   const el=document.getElementById('sl-'+key);
-  el.outerHTML=`<div class="stat-l editable" id="sl-${key}" onclick="editStatLabel('${key}')" title="Click to rename">${val}</div>`;
-  // sync toolbar button labels
+  el.outerHTML=`<div class="stat-l editable" id="sl-${key}" title="Click to rename">${val}</div>`;
   document.getElementById('lbl-'+key).textContent=val;
   document.getElementById('leg-'+key).textContent=val;
-  document.getElementById('sl-'+key).addEventListener('click',()=>editStatLabel(key));
+  document.getElementById('sl-'+key).onclick=()=>editStatLabel(key);
+  persist();
 }
 
 function updateStats(){
@@ -293,7 +324,7 @@ function updateStats(){
       if(color===1){sus++;counts[ai]++;}
       else if(color===2){tar++;counts[ai]++;}
       else if(color===3){dir++;counts[ai]++;}
-      if(m) mil++;
+      if(m)mil++;
     }
   });
   document.getElementById('s-total').textContent=sus+tar+dir;
@@ -304,11 +335,24 @@ function updateStats(){
   const mx=Math.max(...counts);
   const ti=mx>0?counts.indexOf(mx):-1;
   document.getElementById('s-top').textContent=ti>=0?`#${ti+1} ${agentNames[ti]}`:'—';
+  // sync stat labels from saved modeLabels
+  ['sus','tar','dir'].forEach(k=>{
+    const el=document.getElementById('sl-'+k);
+    if(el&&!el.querySelector('input'))el.textContent=modeLabels[k];
+    const lb=document.getElementById('lbl-'+k);
+    if(lb)lb.textContent=modeLabels[k];
+    const lg=document.getElementById('leg-'+k);
+    if(lg)lg.textContent=modeLabels[k];
+  });
 }
 
 buildHeader();
 buildBody();
 updateStats();
+['sus','tar','dir'].forEach(k=>{
+  const el=document.getElementById('sl-'+k);
+  if(el)el.onclick=()=>editStatLabel(k);
+});
 </script>
 </body>
 </html>
