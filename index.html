@@ -262,6 +262,7 @@ function cellClick(ai,d){
   else if(mode==='clr'){cell.color=0;cell.mil=false;}
   renderCell(ai,d);
   updateStats();
+  autoSave();
 }
 
 function renderCell(ai,d){
@@ -277,6 +278,18 @@ function renderCell(ai,d){
   if(tod)cls+=' tod-col';
   el.className=cls;
   el.innerHTML=mil?'<div class="mil-dot"></div>':'';
+}
+
+let autoSaveTimer=null;
+function autoSave(){
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>{
+    const hash=encodeState();
+    history.replaceState(null,'',location.href.split('#')[0]+'#'+hash);
+    const btn=document.getElementById('copy-btn');
+    btn.innerHTML='✅ Auto-saved';
+    setTimeout(()=>{btn.innerHTML='🔗 Copy shareable link';},1200);
+  },500);
 }
 
 let renameIdx=-1;
@@ -295,6 +308,7 @@ function saveModal(){
   }
   closeModal();
   updateStats();
+  autoSave();
 }
 document.getElementById('modal-input').addEventListener('keydown',e=>{if(e.key==='Enter')saveModal();if(e.key==='Escape')closeModal();});
 
